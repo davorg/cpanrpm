@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use File::Basename;
+use Parse::RPM::Spec;
+use CPANRPM;
+
+my $me = basename $0;
+
+my $dsn = "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}";
+my $schema = CPANRPM->connect($dsn, $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS});
+
+@ARGV or die "Usage: $me specfile [, specfile ... ]\n";
+
+foreach my $s (@ARGV) {
+  print $s, "\n";
+  my $spec = Parse::RPM::Spec->new($s);
+
+  print "$s -> : ", $spec->name, "\n";
+  $schema->resultset('Distribution')->create({
+    distname => substr($spec->name, 5),
+    spec     => basename $s,
+    rpmname  => $spec->name . '.rpm',
+  });
+}

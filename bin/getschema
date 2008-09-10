@@ -1,0 +1,10 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use DBIx::Class::Schema::Loader qw(make_schema_at dump_to_dir);
+
+make_schema_at('CPANRPM', { debug => 1, dump_directory => './lib' },
+               [ "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}",
+                 $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS} ]);

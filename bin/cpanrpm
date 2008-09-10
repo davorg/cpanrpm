@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use File::Basename;
+use Parse::RPM::Spec;
+use Parse::CPAN::Packages;
+use LWP::Simple;
+use Cwd;
+use CPANRPM;
+
+@ARGV || die "No spec file given\n";
+
+chdir '/home/dave/rpm';
+
+warn "Getting package details...\n";
+getstore('http://cpan.org/modules/02packages.details.txt.gz',
+         '02packages.details.txt.gz');
+
+warn "Parsing package details...\n";
+my $cpan = Parse::CPAN::Packages->new('02packages.details.txt.gz');
+
+foreach my $s (@ARGV) {
+  handle_spec($s);
+}
+
+sub handle_spec {
+  my $spec_file = shift;
+
+  my $spec = Parse::RPM::Spec->new($spec_file);
+
+  (my $pkg_name = $spec->name) =~ s/^perl-//;
+
+  my $cpan_dist = $cpan->latest_distribution($pkg_name);
+
+  if ($cpan_dist->version eq $spec->version) {
+    warn "No rebuild required\n";
+    return;
+  }
+
+  open my $spec_fh, '+<', $spec_file or die "$spec_file: $!\n";
+  my $file = do { local $/; <$spec_fh> };
+
+  $file =~ s/^(Version:\s+)@{[$spec->version]}/$1@{[$cpan_dist->version]}/m;
+
+  seek $spec_fh, 0, 0;
+  truncate $spec_fh, 0;
+  print $spec_fh $file;
+  close $spec_fh;
+
+  warn 'Retriving http://www.cpan.org/authors/id/' . $cpan_dist->prefix . "\n";
+  warn 'To ' . getcwd . '/SOURCES/' . basename $cpan_dist->prefix . "\n";
+  getstore('http://www.cpan.org/authors/id/' . $cpan_dist->prefix,
+           'SOURCES/' . basename $cpan_dist->prefix);
+  # system('rpmbuild', '-ba', $spec);
+}
