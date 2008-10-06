@@ -11,11 +11,17 @@ use Parse::RPM::Spec;
 use Parse::CPAN::Packages;
 use LWP::Simple;
 use Cwd;
+use Template;
+use DateTime;
+use Sys::Hostname;
 use CPANRPM;
 
-@ARGV || die "No spec file given\n";
+@ARGV || die "No distribution given\n";
 
-chdir '/home/dave/rpm';
+my $build_root = '/home/dave/rpm';
+
+chdir $build_root
+  or die "Can't cd to $build_root\n";
 
 warn "Getting package details...\n";
 getstore('http://cpan.org/modules/02packages.details.txt.gz',
@@ -24,37 +30,64 @@ getstore('http://cpan.org/modules/02packages.details.txt.gz',
 warn "Parsing package details...\n";
 my $cpan = Parse::CPAN::Packages->new('02packages.details.txt.gz');
 
-foreach my $s (@ARGV) {
-  handle_spec($s);
+my $schema = CPANRPM->connect(
+               "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}",
+               $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS},
+             );
+
+my $tt = Template->new({
+			INCLUDE_PATH => 'SPECS',
+			OUTPUT_PATH  => 'SPECS',
+		       });
+
+foreach my $d (@ARGV) {
+  handle_dist($d);
 }
 
-sub handle_spec {
-  my $spec_file = shift;
+sub handle_dist {
+  my $dist_name = shift;
 
-  my $spec = Parse::RPM::Spec->new($spec_file);
+  my $cpan_dist = $cpan->latest_distribution($dist_name);
 
-  (my $pkg_name = $spec->name) =~ s/^perl-//;
+  my $dist_rs = $schema->resultset('Distribution')->search(
+                  { distname => $dist_name }
+                );
 
-  my $cpan_dist = $cpan->latest_distribution($pkg_name);
+  my $dist = $dist_rs->next;
 
-  if ($cpan_dist->version eq $spec->version) {
+  unless ($dist) {
+    warn "No distribution found in database: $dist_name\n";
+    return;
+  }
+
+  my @builds = $dist->builds;
+
+  if (@builds) {
     warn "No rebuild required\n";
     return;
   }
 
-  open my $spec_fh, '+<', $spec_file or die "$spec_file: $!\n";
-  my $file = do { local $/; <$spec_fh> };
-
-  $file =~ s/^(Version:\s+)@{[$spec->version]}/$1@{[$cpan_dist->version]}/m;
-
-  seek $spec_fh, 0, 0;
-  truncate $spec_fh, 0;
-  print $spec_fh $file;
-  close $spec_fh;
+  $tt->process(
+               $dist->spec .'.tt',
+               { version => $cpan_dist->version },
+               $dist->spec,
+              )
+    or die $tt->error;
 
   warn 'Retriving http://www.cpan.org/authors/id/' . $cpan_dist->prefix . "\n";
   warn 'To ' . getcwd . '/SOURCES/' . basename $cpan_dist->prefix . "\n";
   getstore('http://www.cpan.org/authors/id/' . $cpan_dist->prefix,
            'SOURCES/' . basename $cpan_dist->prefix);
-  # system('rpmbuild', '-ba', $spec);
+  my $specfile = $dist->spec;
+  my $build = $dist->create_related('builds',
+				    {
+				     build_env => hostname,
+				     start     => DateTime->now,
+				     version   => $cpan_dist->version,
+				    });
+  my $output = `rpmbuild -ba SPECS/$specfile 2>&1`;
+  $build->return_code($?);
+  $build->end(DateTime->now);
+  $build->log($output);
+  $build->update;
 }
