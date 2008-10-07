@@ -60,9 +60,9 @@ sub handle_dist {
     return;
   }
 
-  my @builds = $dist->builds;
+  my $builds = $dist->search_related( build => { return_code => 0 } );
 
-  if (@builds) {
+  if ($builds && $builds->get_columns('version')->max == $cpan_dist->version) {
     warn "No rebuild required\n";
     return;
   }
