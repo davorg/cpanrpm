@@ -3,10 +3,13 @@
 use strict;
 use warnings;
 
-use FindBin;
-use lib "$FindBin::Bin/../lib";
-
 use File::Basename;
+BEGIN {
+    my $where = dirname(readlink $0 or $0);
+    unshift @INC, "$where/../lib";
+}
+
+use Getopt::Std;
 use Parse::RPM::Spec;
 use Parse::CPAN::Packages;
 use LWP::Simple;
@@ -16,6 +19,18 @@ use DateTime;
 use Sys::Hostname;
 use CPANRPM;
 
+my %opts;
+getopts('a', \%opts);
+
+my $schema = CPANRPM->connect(
+               "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}",
+               $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS},
+             );
+
+if ($opts{a}) {
+  @ARGV = get_all_dists();
+}
+
 @ARGV || die "No distribution given\n";
 
 my $build_root = '/home/dave/rpm';
@@ -23,17 +38,14 @@ my $build_root = '/home/dave/rpm';
 chdir $build_root
   or die "Can't cd to $build_root\n";
 
-warn "Getting package details...\n";
-getstore('http://cpan.org/modules/02packages.details.txt.gz',
-         '02packages.details.txt.gz');
+if (-M '02packages.details.txt.gz' > 1) {
+    warn "Getting package details...\n";
+    getstore('http://cpan.org/modules/02packages.details.txt.gz',
+	     '02packages.details.txt.gz');
+}
 
 warn "Parsing package details...\n";
 my $cpan = Parse::CPAN::Packages->new('02packages.details.txt.gz');
-
-my $schema = CPANRPM->connect(
-               "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}",
-               $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS},
-             );
 
 my $tt = Template->new({
 			INCLUDE_PATH => 'SPECS',
@@ -47,22 +59,25 @@ foreach my $d (@ARGV) {
 sub handle_dist {
   my $dist_name = shift;
 
+  warn "Dist - $dist_name\n";
+
   my $cpan_dist = $cpan->latest_distribution($dist_name);
 
   my $dist_rs = $schema->resultset('Distribution')->search(
                   { distname => $dist_name }
                 );
 
-  my $dist = $dist_rs->next;
+  my $dist = $dist_rs->first;
 
   unless ($dist) {
     warn "No distribution found in database: $dist_name\n";
     return;
   }
 
-  my $builds = $dist->search_related( build => { return_code => 0 } );
+  my $builds = $dist->search_related( builds => { return_code => 0 } );
 
-  if ($builds && $builds->get_columns('version')->max == $cpan_dist->version) {
+  if ($builds && $builds->count &&
+      $builds->get_column('version')->max eq $cpan_dist->version) {
     warn "No rebuild required\n";
     return;
   }
@@ -74,10 +89,14 @@ sub handle_dist {
               )
     or die $tt->error;
 
-  warn 'Retriving http://www.cpan.org/authors/id/' . $cpan_dist->prefix . "\n";
-  warn 'To ' . getcwd . '/SOURCES/' . basename $cpan_dist->prefix . "\n";
-  getstore('http://www.cpan.org/authors/id/' . $cpan_dist->prefix,
-           'SOURCES/' . basename $cpan_dist->prefix);
+  unless (-f 'SOURCES/' . basename $cpan_dist->prefix) {
+    warn 'Retriving http://www.cpan.org/authors/id/' .
+         $cpan_dist->prefix . "\n";
+    warn 'To ' . getcwd . '/SOURCES/' . basename $cpan_dist->prefix . "\n";
+    getstore('http://www.cpan.org/authors/id/' . $cpan_dist->prefix,
+             'SOURCES/' . basename $cpan_dist->prefix);
+  }
+
   my $specfile = $dist->spec;
   my $build = $dist->create_related('builds',
 				    {
@@ -90,4 +109,11 @@ sub handle_dist {
   $build->end(DateTime->now);
   $build->log($output);
   $build->update;
+
+  warn "Build error\n" if $?;
+}
+
+sub get_all_dists {
+  return map { $_->distname } $schema->resultset('Distribution')->
+                                       search({ active => 1 })->all;  
 }
