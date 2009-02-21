@@ -15,7 +15,7 @@ my $schema = CPANRPM->connect($dsn, $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS});
 @ARGV or die "Usage: $me specfile [, specfile ... ]\n";
 
 foreach my $s (@ARGV) {
-  print $s, "\n";
+  print "$s\n";
   my $spec = Parse::RPM::Spec->new($s);
 
   print "$s -> : ", $spec->name, "\n";
