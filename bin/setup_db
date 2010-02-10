@@ -1,0 +1,19 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use CPANRPM;
+
+my $schema = CPANRPM->connect(
+    'dbi:mysql:dbname=cpanrpm',
+    'cpanrpm',
+    'cp4nrpm',
+);
+
+if (!$schema->get_db_version()) {
+  # schema is unversioned
+  $schema->deploy();
+} else {
+  $schema->upgrade();
+}
