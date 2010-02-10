@@ -9,7 +9,7 @@ __PACKAGE__->load_components("Core");
 __PACKAGE__->table("distribution");
 __PACKAGE__->add_columns(
   "id",
-  { data_type => "INT", default_value => undef, is_nullable => 0, size => 11 },
+  { data_type => "INT", default_value => 0, is_nullable => 0, size => 11 },
   "distname",
   { data_type => "VARCHAR", default_value => "", is_nullable => 0, size => 200 },
   "spec",
