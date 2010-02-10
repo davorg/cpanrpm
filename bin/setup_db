@@ -6,9 +6,9 @@ use warnings;
 use CPANRPM;
 
 my $schema = CPANRPM->connect(
-    'dbi:mysql:dbname=cpanrpm',
-    'cpanrpm',
-    'cp4nrpm',
+    "dbi:mysql:dbname=cpanrpm;host=$ENV{CPANRPM_HOST}",
+    $ENV{CPANRPM_USER},
+    $ENV{CPANRPM_PASS},
 );
 
 if (!$schema->get_db_version()) {
