@@ -16,12 +16,14 @@ my $schema = CPANRPM->connect($dsn, $ENV{CPANRPM_USER}, $ENV{CPANRPM_PASS});
 
 foreach my $s (@ARGV) {
   print "$s\n";
-  my $spec = Parse::RPM::Spec->new($s);
+  my $spec = Parse::RPM::Spec->new(file => $s);
+
+  my $new_dist = {
+    distname => substr($spec->name, 5),
+    spec     => basename($s),
+    rpmname  => $spec->name . '.rpm',
+  };
 
   print "$s -> : ", $spec->name, "\n";
-  $schema->resultset('Distribution')->create({
-    distname => substr($spec->name, 5),
-    spec     => basename $s,
-    rpmname  => $spec->name . '.rpm',
-  });
+  $schema->resultset('Distribution')->create($new_dist);
 }

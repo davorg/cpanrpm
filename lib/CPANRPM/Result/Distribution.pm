@@ -23,7 +23,7 @@ __PACKAGE__->table("distribution");
 =head2 id
 
   data_type: 'integer'
-  default_value: 0
+  is_auto_increment: 1
   is_nullable: 0
 
 =head2 distname
@@ -57,7 +57,7 @@ __PACKAGE__->table("distribution");
 
 __PACKAGE__->add_columns(
   "id",
-  { data_type => "integer", default_value => 0, is_nullable => 0 },
+  { data_type => "integer", is_auto_increment => 1, is_nullable => 0 },
   "distname",
   { data_type => "varchar", default_value => "", is_nullable => 0, size => 200 },
   "spec",
@@ -87,8 +87,8 @@ __PACKAGE__->has_many(
 );
 
 
-# Created by DBIx::Class::Schema::Loader v0.07010 @ 2011-03-26 20:49:52
-# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:PIcOmdIaUzev341WUoxbzw
+# Created by DBIx::Class::Schema::Loader v0.07010 @ 2011-03-26 21:43:50
+# DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:WqVqxmsvHQYU1jH7t52f3w
 
 
 # You can replace this text with custom code or comments, and it will be preserved on regeneration
